@@ -1,0 +1,4 @@
+.venv/
+rosbags/
+save/
+echos/70.pkl
