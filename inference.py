@@ -23,7 +23,7 @@ from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler 
 
 from autohand_node import AutoHandNode 
-from dataset.data_utils import * 
+from datasets.data_utils import * 
 from model.noise_pred_net import * 
 from model.visual_encoder import * 
 from config import * 
@@ -50,8 +50,9 @@ class DiffPolicyInfer:
             self.max_pos = [1] * self.num_motors  # Set the maximum position of the motors
 
             # Get and concatenate the initial values of hand positions
-            init_hand_pos_port1 = AutoHandNode.init_pos[0]
-            init_hand_pos_port2 = AutoHandNode.init_pos[1]
+            autohand_node =  AutoHandNode()
+            init_hand_pos_port1 = autohand_node.init_pos[0]
+            init_hand_pos_port2 = autohand_node.init_pos[1]
             self.ini_hand_pos = np.concatenate((init_hand_pos_port1, init_hand_pos_port2), axis=1)
             self.ini_xarm_pos = np.array([0, 0, 0, 1.57, 0, 1.57, 0])  # Set the initial position of the XArm
             self.joint_positions = np.concatenate([self.ini_hand_pos, self.ini_xarm_pos])  # Concatenate hand and XArm initial positions
