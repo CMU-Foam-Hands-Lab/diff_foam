@@ -40,7 +40,7 @@ To run model inference:
    ```bash
    ros2 launch realsense_rgbd_transport_ros2 rs_launch.py
    ```
-   This should be run from the `~/re_camera` directory.
+   This should be run from the `~/rs_camera` directory.
 
 2. Run the `inference.ipynb` notebook.
 3. Ensure to update the data input and output paths in the notebook. 
