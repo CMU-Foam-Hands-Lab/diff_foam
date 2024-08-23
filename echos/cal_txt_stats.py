@@ -1,6 +1,5 @@
 import re
 
-# 读取cmd_xarm.txt文件并解析数据
 def parse_file(filename):
     data = []
     with open(filename, 'r') as file:
@@ -12,7 +11,6 @@ def parse_file(filename):
                 data.append(numbers)
     return data
 
-# 计算每列的最小值和最大值
 def calculate_min_max(data):
     if not data:
         return []
@@ -28,14 +26,12 @@ def calculate_min_max(data):
     
     return min_values, max_values
 
-# 写入结果到output.txt文件
 def write_results(filename, min_values, max_values):
     with open(filename, 'w') as file:
         file.write("Column\tMin Value\tMax Value\n")
         for i, (min_val, max_val) in enumerate(zip(min_values, max_values)):
             file.write(f"{i + 1}\t{min_val:.6f}\t{max_val:.6f}\n")
 
-# 主函数
 def main():
     input_file = '/home/foamlab/nw/mydata/dice/pkls/cmd_xarm_sync.txt'
     output_file = '/home/foamlab/nw/mydata/dice/pkls/statistics_cmd_xarm.txt'
