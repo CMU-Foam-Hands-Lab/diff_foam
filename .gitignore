@@ -2,3 +2,4 @@
 rosbags/
 save/
 echos/70.pkl
+__pycache__/*
