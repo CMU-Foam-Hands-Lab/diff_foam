@@ -103,16 +103,15 @@ class RosbagReader:
                         print(f"Error decoding /xarm/move_joint_cmd message: {e}")
 
                 elif topic == '/autohand_node/state_autohand':
-                    if count_state_hand % self.downsample_rate == 0:
-                        try:
-                            msg = deserialize_message(msg, joint_state_type)
-                            data = self.decode_joint_state(msg)
-                            self.state_hand_data.append(data)
-                            self.state_hand_time.append(t)
-                            f3.write(f"Time: {t}, Data: {data}\n")
-                        except Exception as e:
-                            print(f"Error decoding /autohand_node/state_autohand message: {e}")
-                    count_state_hand += 1
+                    try:
+                        msg = deserialize_message(msg, joint_state_type)
+                        data = self.decode_joint_state(msg)
+                        self.state_hand_data.append(data)
+                        self.state_hand_time.append(t)
+                        count_state_hand += 1
+                        f3.write(f"Time: {t}, Data: {data}\n")
+                    except Exception as e:
+                        print(f"Error decoding /autohand_node/state_autohand message: {e}")
 
                 elif topic == '/xarm/joint_states':
                     try:
@@ -126,29 +125,33 @@ class RosbagReader:
                         print(f"Error decoding /xarm/joint_states message: {e}")
 
                 elif topic == '/camera/color/image_raw/compressed' and isinstance(msg, bytes):
-                    try:
-                        start_idx = msg.find(b'\xff\xd8')
-                        end_idx = msg.find(b'\xff\xd9')
+                    if count_image % self.downsample_rate == 0:
+                        try:
+                            start_idx = msg.find(b'\xff\xd8')
+                            end_idx = msg.find(b'\xff\xd9')
 
-                        if start_idx == -1 or end_idx == -1:
-                            print(f"JPEG markers not found. Start index: {start_idx}, End index: {end_idx}")
-                            continue
+                            if start_idx == -1 or end_idx == -1:
+                                print(f"JPEG markers not found. Start index: {start_idx}, End index: {end_idx}")
+                                continue
 
-                        jpeg_data = msg[start_idx:end_idx + 2]
-                        np_arr = np.frombuffer(jpeg_data, np.uint8)
-                        cur_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                            jpeg_data = msg[start_idx:end_idx + 2]
+                            np_arr = np.frombuffer(jpeg_data, np.uint8)
+                            cur_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-                        if cur_image is None:
-                            print("Failed to decode image")
-                            print(f"JPEG data length: {len(jpeg_data)}")
-                            continue
+                            if cur_image is None:
+                                print("Failed to decode image")
+                                print(f"JPEG data length: {len(jpeg_data)}")
+                                continue
 
-                        cur_image = cv2.resize(cur_image, (320, 240))
-                        self.image_data.append(cur_image)
-                        self.image_time.append(t)
-                        count_image += 1
-                    except Exception as e:
-                        print(f"Error processing /camera/color/image_raw/compressed message: {e}")
+                            cur_image = cv2.resize(cur_image, (320, 240))
+                            # 一般来说，图像的形状表示的顺序是 (高度, 宽度, 通道数)，即 (H, W, C)。
+                            # cv2.resize(cur_image, (320, 240)) 后，图像的形状将变为 (240, 320, channels)，
+                            # 其中 (320, 240) 是宽度和高度的顺序。
+                            self.image_data.append(cur_image)
+                            self.image_time.append(t)
+                        except Exception as e:
+                            print(f"Error processing /camera/color/image_raw/compressed message: {e}")
+                    count_image += 1
 
         print("# /autohand_node/cmd_autohand data: ", count_cmd_hand)
         print("# /xarm/move_joint_cmd data: ", count_cmd_xarm)
@@ -188,31 +191,48 @@ class RosbagReader:
         count_state_arm = 0
         count_image = 0
 
-        for i in range(len(state_hand_time)):
-            while count_image < len(image_time) and image_time[count_image] < state_hand_time[i]:
-                count_image += 1
-            synced_idx0.append(count_image)
+        # 创建新的对齐后的txt文件
+        cmd_hand_sync_file_path = osp.join(self.save_path, 'cmd_hand_sync.txt')
+        cmd_xarm_sync_file_path = osp.join(self.save_path, 'cmd_xarm_sync.txt')
+        state_hand_sync_file_path = osp.join(self.save_path, 'state_hand_sync.txt')
+        state_xarm_sync_file_path = osp.join(self.save_path, 'state_xarm_sync.txt')
 
-            while count_cmd_hand < len(cmd_hand_time) and cmd_hand_time[count_cmd_hand] < state_hand_time[i]:
-                count_cmd_hand += 1
-            synced_idx1.append(count_cmd_hand)
+        with open(cmd_hand_sync_file_path, 'a') as f_sync1, \
+            open(cmd_xarm_sync_file_path, 'a') as f_sync2, \
+            open(state_hand_sync_file_path, 'a') as f_sync3, \
+            open(state_xarm_sync_file_path, 'a') as f_sync4:
 
-            while count_cmd_xarm < len(cmd_xarm_time) and cmd_xarm_time[count_cmd_xarm] < state_hand_time[i]:
-                count_cmd_xarm += 1
-            synced_idx2.append(count_cmd_xarm)
+            for i in range(len(image_time)):
+                while count_image < len(image_time) and image_time[count_image] < image_time[i]:
+                    count_image += 1
+                synced_idx0.append(count_image)
 
-            while count_state_arm < len(state_xarm_time) and state_xarm_time[count_state_arm] < state_hand_time[i]:
-                count_state_arm += 1
-            synced_idx3.append(count_state_arm)
+                while count_cmd_hand < len(cmd_hand_time) and cmd_hand_time[count_cmd_hand] < image_time[i]:
+                    count_cmd_hand += 1
+                synced_idx1.append(count_cmd_hand)
 
-        print("# sync: ", len(state_hand_time), len(synced_idx0), len(synced_idx1), len(synced_idx2), len(synced_idx3))
+                while count_cmd_xarm < len(cmd_xarm_time) and cmd_xarm_time[count_cmd_xarm] < image_time[i]:
+                    count_cmd_xarm += 1
+                synced_idx2.append(count_cmd_xarm)
 
-        for i in range(5, len(state_hand_time) - 5):
-            pkl_data['state_hand'].append(self.state_hand_data[i])
-            pkl_data['image'].append(self.image_data[synced_idx0[i]])
-            pkl_data['cmd_hand'].append(self.cmd_hand_data[synced_idx1[i]])
-            pkl_data['cmd_xarm'].append(self.cmd_xarm_data[synced_idx2[i]])
-            pkl_data['state_xarm'].append(self.state_xarm_data[synced_idx3[i]])
+                while count_state_arm < len(state_xarm_time) and state_xarm_time[count_state_arm] < image_time[i]:
+                    count_state_arm += 1
+                synced_idx3.append(count_state_arm)
+
+            print("# sync: ", len(image_time), len(synced_idx0), len(synced_idx1), len(synced_idx2), len(synced_idx3))
+
+            for i in range(5, len(image_time) - 5):
+                pkl_data['state_hand'].append(self.state_hand_data[i])
+                pkl_data['image'].append(self.image_data[synced_idx0[i]])
+                pkl_data['cmd_hand'].append(self.cmd_hand_data[synced_idx1[i]])
+                pkl_data['cmd_xarm'].append(self.cmd_xarm_data[synced_idx2[i]])
+                pkl_data['state_xarm'].append(self.state_xarm_data[synced_idx3[i]])
+
+                # 写入对齐后的数据到各自的文件
+                f_sync1.write(f"Time: {self.cmd_hand_time[synced_idx1[i]]}, Data: {self.cmd_hand_data[synced_idx1[i]]}\n")
+                f_sync2.write(f"Time: {self.cmd_xarm_time[synced_idx2[i]]}, Data: {self.cmd_xarm_data[synced_idx2[i]]}\n")
+                f_sync3.write(f"Time: {self.state_hand_time[i]}, Data: {self.state_hand_data[i]}\n")
+                f_sync4.write(f"Time: {self.state_xarm_time[synced_idx3[i]]}, Data: {self.state_xarm_data[synced_idx3[i]]}\n")
 
         print("# cmd_xarm data: ", len(pkl_data['cmd_xarm']))
         print("# cmd_hand data: ", len(pkl_data['cmd_hand']))
@@ -222,7 +242,6 @@ class RosbagReader:
 
         with open(data_filename, 'wb') as f:
             pkl.dump(pkl_data, f)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -244,3 +263,15 @@ if __name__ == "__main__":
         reader.read_data()
         if args.save:
             reader.save_pkl()
+
+# ~/nw/datasets$ python rosbag2pkl_arm_hand.py -f 0814try -p ../save2 -s
+# python rosbag2pkl_arm_hand.py -f summer -p ../save -s
+# python rosbag2pkl_arm_hand.py -f dice_cube -p ../rosbags -s
+# python rosbag2pkl_arm_hand.py -f dice -p ../mydata -s
+# python rosbag2pkl_arm_hand.py -f dice_single -p ../mydata -s
+# python rosbag2pkl_arm_hand.py -f dice -p ../mytest -s
+
+# python rosbag2pkl_arm_hand.py -f tennis -p ../mydata -s
+# python rosbag2pkl_arm_hand.py -f cylinder -p ../mydata -s
+
+
